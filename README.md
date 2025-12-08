@@ -27,6 +27,8 @@ The following steps will take you from Illumina output files to a read count tha
 
 Trim Galore is used to clean high-throughput sequencing reads by automatically trimming adapters and low-quality bases. It serves as a wrapper around Cutadapt and FastQC, combining adapter removal with quality control checks in a single step. By removing unwanted sequences and short or poor-quality reads, Trim Galore improves the overall accuracy and reliability of downstream analyses such as read alignment and assembly. It takes a fastq file that comes directly from Illumina as an input. 
 
+`sbatch step1_trim_galore.sh`
+
 <details>
   <summary>Click to expand code</summary>
   

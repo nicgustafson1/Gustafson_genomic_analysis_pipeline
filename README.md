@@ -4,7 +4,7 @@ The goal of this project is to take short read Illumina sequencing data, trim of
 # Environment Setup
 On the virginia tech arc website, open a terminal where you can create an environment. Use your home directory to enter the terminal. 
 
-`conda env create -f environment.yml -n gustafson_analysis`
+`interact -A introtogds -p normal_q -t 1:00:00`
 
 # Software installation 
 

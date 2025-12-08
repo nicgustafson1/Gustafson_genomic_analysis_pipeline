@@ -69,7 +69,7 @@ log "Output directory: $OUTPUT_DIR"
 
 #Activate conda environment
 source ~/.bashrc
-module load miniconda
+module load Miniconda3
 conda activate gustafson_analysis
 
 #Main loop

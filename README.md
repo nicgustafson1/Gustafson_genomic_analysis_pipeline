@@ -206,58 +206,72 @@ Kraken2 is a very fast way to assign taxonomic labels using k-mers to metagenomi
 
 #SBATCH -t 70:00:00
 #SBATCH -p normal_q
-#SBATCH -A gustafson_analysis
+#SBATCH -A introtogds
 #SBATCH --mail-type=ALL
-#SBATCH --mail-user=###nicgistafson1@vt.edu 
+#SBATCH --mail-user=nicgistafson1@vt.edu 
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=200GB
+#SBATCH --mem=100GB
 #SBATCH --output=kraken2_%j.out
 #SBATCH --error=kraken2_%j.err
 
-#Set downloaded directory 
+# ---------------------------------
+# Set working directory
+# ---------------------------------
 cd /home/nicgustafson1/genomic_analysis
 
-#Set conda environment
+# ---------------------------------
+# Load conda environment
+# ---------------------------------
 source ~/.bashrc
+module load Miniconda3
 conda activate gustafson_analysis
 
-#Parameters
+# ---------------------------------
+# Parameters
+# ---------------------------------
 DB="/home/nicgustafson1/genomic_analysis/databases/kraken2/k2_db"
 INPUT_DIR="/home/nicgustafson1/genomic_analysis/bwa_outputs"
 OUTPUT_BASE="/home/nicgustafson1/genomic_analysis/kraken2_outputs"
 LOG_DIR="logs"
-THREADS=16
 
-#Logging setup
-#have log set exact date and time for each iteration
+# Use the number of CPUs allocated by SLURM
+THREADS=$SLURM_CPUS_PER_TASK
+
+# Create log directory if it doesn't exist
+mkdir -p "$LOG_DIR"
 LOGFILE="$LOG_DIR/kraken2_${SLURM_JOB_ID:-manual}.log"
+
+# Logging function
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOGFILE"; }
 
+log "--------------------------------"
 log "Starting Kraken2 classification job on $(hostname)"
 log "Using database: $DB"
-log "Scanning SPAdes assemblies in: $SPADES_DIR"
+log "Scanning input assemblies in: $INPUT_DIR"
+log "Threads allocated: $THREADS"
+log "--------------------------------"
 
-#Main loop
-for CONTIG_PATH in "${INPUT_DIR}"/sample*_test_data/contigs.fasta; do
-    #Skip if no files found
-    [ -e "$CONTIG_PATH" ] || { log "No contigs.fasta files found in $SPADES_DIR"; break; }
+# ---------------------------------
+# Main loop over input files
+# ---------------------------------
+for CONTIG_PATH in "${INPUT_DIR}"/sample*_test_data_nonhost.fastq.gz; do
+    # Skip if no files found
+    [ -e "$CONTIG_PATH" ] || { log "No input files found in $INPUT_DIR"; break; }
 
-    #Extract sample name (e.g. sample1_test_data)
-    SAMPLE_DIR=$(basename "$(dirname "$CONTIG_PATH")")
-    SAMPLE="${SAMPLE_DIR%%_test_data}"
-
+    # Extract sample name (e.g., sample1, sample2)
+    SAMPLE=$(basename "$CONTIG_PATH" | sed 's/_test_data_nonhost.fastq.gz//')
     log "Processing sample: $SAMPLE"
 
-    #Define per-sample output directory under kraken2_outputs
-    OUT_DIR="${OUTPUT_BASE}/${SAMPLE_DIR}"
+    # Define per-sample output directory
+    OUT_DIR="${OUTPUT_BASE}/${SAMPLE}"
     mkdir -p "$OUT_DIR"
 
-    #Define output file paths
-    REPORT="${OUT_DIR}/${SAMPLE}_assembly_report_test_data.txt"
-    OUTPUT="${OUT_DIR}/${SAMPLE}_assembly_kraken_test_data.out"
-    CLASSIFIED="${OUT_DIR}/${SAMPLE}_assembly_classified_test_data.fastq"
+    # Define Kraken2 output files
+    REPORT="${OUT_DIR}/${SAMPLE}_assembly_report.txt"
+    OUTPUT="${OUT_DIR}/${SAMPLE}_assembly_kraken.out"
+    CLASSIFIED="${OUT_DIR}/${SAMPLE}_assembly_classified.fastq"
 
-    #Run Kraken2 classification
+    # Run Kraken2 classification
     k2 classify \
         --db "$DB" \
         "$CONTIG_PATH" \
@@ -267,14 +281,16 @@ for CONTIG_PATH in "${INPUT_DIR}"/sample*_test_data/contigs.fasta; do
         --classified-out "$CLASSIFIED" \
         2>&1 | tee -a "$LOGFILE"
 
-    #Compress large outputs
-    gzip -f "$OUTPUT" "$CLASSIFIED"
+    # Compress large output files safely
+    [ -f "$OUTPUT" ] && gzip -f "$OUTPUT"
+    [ -f "$CLASSIFIED" ] && gzip -f "$CLASSIFIED"
 
     log "Finished processing $SAMPLE"
     log "--------------------------------"
 done
 
 log "All samples processed successfully."
+log "--------------------------------"
 ```
 
 </details>

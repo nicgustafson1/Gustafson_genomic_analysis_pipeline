@@ -35,11 +35,11 @@ Trim Galore is used to clean high-throughput sequencing reads by automatically t
 
 #SBATCH -t 70:00:00
 #SBATCH -p normal_q
-#SBATCH -A gustafson_analysis
+#SBATCH -A introtogds
 #SBATCH --mail-type=ALL
-#SBATCH --mail-user=###nicgustafson1@vt.edu 
+#SBATCH --mail-user=nicgustafson1@vt.edu 
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=200GB
+#SBATCH --mem=32GB
 #SBATCH --output=trim_galore_%j.out
 #SBATCH --error=trim_galore_%j.err
 
@@ -49,7 +49,7 @@ cd /home/nicgustafson1/genomic_analysis
 #Set variables for loop
 
 #create an input and output directory for trim_galore samples, set the thread count, and create a log
-INPUT_DIR="/home/nicgustafson/genomic_analysis/data"
+INPUT_DIR="/home/nicgustafson1/genomic_analysis/data"
 OUTPUT_DIR="/home/nicgustafson1/genomic_analysis/trim_galore_outputs"
 LOG_DIR="logs"
 THREADS=8
@@ -67,6 +67,7 @@ log "Output directory: $OUTPUT_DIR"
 
 #Activate conda environment
 source ~/.bashrc
+module load miniconda
 conda activate gustafson_analysis
 
 #Main loop

@@ -240,8 +240,10 @@ log "All samples processed successfully."
 
 </details>
 
+# Pavian Shiny App
+This website will be used ot create a graphical representation of read counts. 
 
-
+https://fbreitwieser.shinyapps.io/pavian/
 
 
 

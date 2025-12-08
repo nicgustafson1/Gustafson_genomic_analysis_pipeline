@@ -25,4 +25,72 @@ The following steps will take you from Illumina output files to a read count tha
 
 # Trim Galore
 
-Trim Galore is used to clean high-throughput sequencing reads by automatically trimming adapters and low-quality bases. It serves as a wrapper around Cutadapt and FastQC, combining adapter removal with quality control checks in a single step. By removing unwanted sequences and short or poor-quality reads, Trim Galore improves the overall accuracy and reliability of downstream analyses such as read alignment and assembly. It takes a fastq file that comes directly from Illumina as an imput. 
+Trim Galore is used to clean high-throughput sequencing reads by automatically trimming adapters and low-quality bases. It serves as a wrapper around Cutadapt and FastQC, combining adapter removal with quality control checks in a single step. By removing unwanted sequences and short or poor-quality reads, Trim Galore improves the overall accuracy and reliability of downstream analyses such as read alignment and assembly. It takes a fastq file that comes directly from Illumina as an input. 
+
+<details>
+  <summary>Click to expand code</summary>
+  
+```
+#!/bin/bash
+
+#SBATCH -t 70:00:00
+#SBATCH -p normal_q
+#SBATCH -A introtogds
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=###vt-pid@vt.edu # Change to whichever email you would like to receive job updates
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=200GB
+#SBATCH --output=trim_galore_%j.out
+#SBATCH --error=trim_galore_%j.err
+
+#Path to main folder (where the github folders are located)
+cd /projects/intro2gds/I2GDS2025/G4_Viruses/github/
+
+#Set variables for loop
+
+#create an input and output directory for trim_galore samples, set the thread count, and create a log
+INPUT_DIR="/projects/intro2gds/I2GDS2025/TestData_LinuxPeerEval/G4_testdata"
+OUTPUT_DIR="outputs/trimmed_outputs"
+LOG_DIR="logs"
+THREADS=8
+
+mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
+
+#Logging function
+LOGFILE="$LOG_DIR/trim_galore_${SLURM_JOB_ID}.log"
+#have log set exact date and time for each iteration
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOGFILE"; }
+
+log "Starting Trim Galore job on $(hostname)"
+log "Input directory: $INPUT_DIR"
+log "Output directory: $OUTPUT_DIR"
+
+#Activate conda environment
+source ~/.bashrc
+conda activate g4_viruses
+
+#Main loop
+#Input test data files and run trim_galore on them, outputting them to a new directory
+FASTQ_FILES=("$INPUT_DIR"/sample*_test_data.fastq.gz)
+[ ${#FASTQ_FILES[@]} -gt 0 ] || { log "No FASTQ files found in $INPUT_DIR"; exit 1; }
+
+for FILE in "${FASTQ_FILES[@]}"; do
+    SAMPLE="${FILE%%_test_data.fastq.gz}"
+    log "Processing sample: $SAMPLE"
+    
+    trim_galore "$FILE" -j "$THREADS" -o "$OUTPUT_DIR"
+    
+    log "Finished sample: $SAMPLE"
+done
+
+log "Trim Galore completed successfully."
+```
+</details>
+
+
+
+
+
+
+
+

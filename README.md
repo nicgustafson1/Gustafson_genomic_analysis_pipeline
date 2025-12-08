@@ -1,5 +1,5 @@
 # Gustafson_genomic_analysis_pipeline
-Taking illumina reads to analysis
+The goal of this project is to take short read Illumina sequencing data, trim off the adaptors and low quality bases, remove the human genome, and compare each read to the Kraken database. The end outputs will then be taken to count how many reads are from the same species.
 
 # Environment Setup
 On the virginia tech arc website, open a terminal where you can create an environment. Use your home directory to enter the terminal. 

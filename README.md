@@ -67,7 +67,7 @@ log "Output directory: $OUTPUT_DIR"
 
 #Activate conda environment
 source ~/.bashrc
-conda activate g4_viruses
+conda activate gustafson_analysis
 
 #Main loop
 #Input test data files and run trim_galore on them, outputting them to a new directory
@@ -99,25 +99,25 @@ Burrow-Wheeler Aligner for short-read alignment. This maps DNA sequences against
 
 #SBATCH -t 70:00:00
 #SBATCH -p normal_q
-#SBATCH -A introtogds
+#SBATCH -A gustafson_analysis
 #SBATCH --mail-type=ALL
-#SBATCH --mail-user=###vt-pid@vt.edu # Change to whichever email you would like to receive job updates
+#SBATCH --mail-user=###nicgustafson1@vt.edu
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=200GB
 #SBATCH --output=bwa_%j.out
 #SBATCH --error=bwa_%j.err
 
-#Path to main folder (where the github folders are located)
-cd /projects/intro2gds/I2GDS2025/G4_Viruses/github/
+#Path to main folder (likely your home directory)
+cd /home/nicgustafson1/genomic_analysis
 
 #Set Conda Environment
 source ~/.bashrc
-conda activate g4_viruses
+conda activate gustafson_analysis
 
 #Create an input and output directory for BWA samples, set the thread count, set reference database directory, and create a log
-REF="/projects/intro2gds/I2GDS2025/G4_Viruses/databases/bwa/human_ref.fna"
-INPUT_DIR="outputs/trimmed_outputs"
-OUTPUT_DIR="outputs/bwa_outputs"
+REF="/home/nicgustafson1/genomic_analysis/databases/bwa"
+INPUT_DIR="/home/nicgustafson1/genomic_analysis/trim_galore_outputs"
+OUTPUT_DIR="/home/nicgustafson1/genomic_analysis/trim_galore_outputs"
 LOG_DIR="logs"
 THREADS=16
 
@@ -180,11 +180,11 @@ cd /home/nicgustafson1/genomic_analysis
 
 #Set conda environment
 source ~/.bashrc
-conda activate g4_viruses
+conda activate gustafson_analysis
 
 #Parameters
 DB="/home/nicgustafson1/genomic_analysis/databases/kraken2/k2_db"
-INPUT_DIR="/home/nicgustafson1/genomic_analysis/trim_galore_outputs"
+INPUT_DIR="/home/nicgustafson1/genomic_analysis/bwa_outputs"
 OUTPUT_BASE="/home/nicgustafson1/genomic_analysis/kraken2_outputs"
 LOG_DIR="logs"
 THREADS=16

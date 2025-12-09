@@ -21,7 +21,7 @@ conda env create -f environment.yml -n gustafson_analysis
 
 # Analysis Pipeline
 
-The following steps will take you from Illumina output files to a read count that can be read through software. 
+
 
 # Trim Galore
 

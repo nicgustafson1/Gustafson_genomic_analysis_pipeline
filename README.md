@@ -333,6 +333,10 @@ In order to start a job using one of the three steps under the Genomic_analysis 
 
 
 
+# Example Output
+
+This image was generated using this pipeline:
+<img width="1006" height="501" alt="image" src="https://github.com/user-attachments/assets/742cd818-a327-4b15-a126-b8185168926b" />
 
 
 

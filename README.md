@@ -104,32 +104,35 @@ if you get an error about UNIX line endingsm use this: sed -i 's/\r$//' step2_bw
 
 #SBATCH -t 70:00:00
 #SBATCH -p normal_q
-#SBATCH -A introtogds         
+#SBATCH -A introtogds
 #SBATCH --mail-type=ALL
-#SBATCH --mail-user=nicgustafson1@vt.edu
+#SBATCH --mail-user=nicgistafson1@vt.edu
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64GB
 #SBATCH --output=bwa_%j.out
 #SBATCH --error=bwa_%j.err
 
+# ---------------------------------
 # Move to project directory
-cd /home/nicgustafson1/genomic_analysis
+# ---------------------------------
+cd /home/nicgustafson1/genomic_analysis || exit 1
 
-# ----------------------------
+# ---------------------------------
 # Load Conda environment safely
-# ----------------------------
+# ---------------------------------
 module load Miniconda3
 source /apps/common/software/Miniconda3/24.7.1-0/etc/profile.d/conda.sh
 conda activate gustafson_analysis
 
 # Confirm tools are available
-which bwa
-which samtools
+which bwa || exit 1
+which samtools || exit 1
 
-# ----------------------------
+# ---------------------------------
 # Parameters
-# ----------------------------
-REF="/home/nicgustafson1/genomic_analysis/databases/bwa"
+# ---------------------------------
+REF="/home/nicgustafson1/genomic_analysis/databases/bwa/human_ref.fna"
+
 INPUT_DIR="/home/nicgustafson1/genomic_analysis/trim_galore_outputs"
 OUTPUT_DIR="/home/nicgustafson1/genomic_analysis/bwa_outputs"
 LOG_DIR="logs"
@@ -137,28 +140,29 @@ THREADS=$SLURM_CPUS_PER_TASK
 
 mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
 
-# ----------------------------
+# ---------------------------------
 # Logging function
-# ----------------------------
+# ---------------------------------
 LOGFILE="$LOG_DIR/bwa_${SLURM_JOB_ID}.log"
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOGFILE"; }
 
+log "--------------------------------"
 log "Starting BWA alignment on $(hostname)"
 log "Input directory: $INPUT_DIR"
 log "Output directory: $OUTPUT_DIR"
 log "Reference: $REF"
+log "Threads: $THREADS"
+log "--------------------------------"
 
-# ----------------------------
+# ---------------------------------
 # Loop through trimmed FASTQ files
-# ----------------------------
+# ---------------------------------
 for FILE in "$INPUT_DIR"/sample*_test_data_trimmed.fq.gz; do
     [ -e "$FILE" ] || { log "No trimmed FASTQ files found in $INPUT_DIR"; exit 1; }
 
-    # Extract sample name (e.g., sample1_test_data)
     SAMPLE=$(basename "$FILE" "_trimmed.fq.gz")
     log "Processing sample: $SAMPLE"
 
-    # Define file paths
     SAM="${OUTPUT_DIR}/aln-${SAMPLE}.sam"
     SORTED="${OUTPUT_DIR}/aln-${SAMPLE}.sorted.bam"
     NONHOST="${OUTPUT_DIR}/non_host_${SAMPLE}.bam"
@@ -169,20 +173,41 @@ for FILE in "$INPUT_DIR"/sample*_test_data_trimmed.fq.gz; do
     # ----------------------------
     bwa mem -t "$THREADS" "$REF" "$FILE" > "$SAM"
 
-    # Convert SAM → sorted BAM
+    # ----------------------------
+    # Check if SAM contains reads
+    # ----------------------------
+    READ_COUNT=$(samtools view -c "$SAM" 2>/dev/null)
+
+    if [ "$READ_COUNT" -eq 0 ]; then
+        log "WARNING: No reads aligned for $SAMPLE. Sending trimmed reads directly to Kraken."
+        cp "$FILE" "${FASTQ}.gz"
+        continue
+    fi
+
+    # ----------------------------
+    # SAM → Sorted BAM
+    # ----------------------------
     samtools view -@ "$THREADS" -Sb "$SAM" | samtools sort -@ "$THREADS" -o "$SORTED"
     samtools index "$SORTED"
 
-    # Extract unmapped reads (non-host)
+    # ----------------------------
+    # Extract unmapped (non-host) reads
+    # ----------------------------
     samtools view -@ "$THREADS" -b -f 4 "$SORTED" > "$NONHOST"
 
-    # Convert non-host BAM → FASTQ
-    samtools fastq -@ "$THREADS" "$NONHOST" > "$FASTQ"
+    NONHOST_COUNT=$(samtools view -c "$NONHOST")
 
-    # Compress FASTQ for Kraken2
-    gzip -f "$FASTQ"
+    if [ "$NONHOST_COUNT" -eq 0 ]; then
+        log "WARNING: No non-host reads for $SAMPLE. Sending all trimmed reads to Kraken."
+        cp "$FILE" "${FASTQ}.gz"
+    else
+        samtools fastq -@ "$THREADS" "$NONHOST" > "$FASTQ"
+        gzip -f "$FASTQ"
+    fi
 
-    # Optional: compress intermediate BAMs to save space
+    # ----------------------------
+    # Compress intermediate files
+    # ----------------------------
     gzip -f "$SAM" "$SORTED" "$NONHOST"
 
     log "Finished processing $SAMPLE"
@@ -190,6 +215,7 @@ for FILE in "$INPUT_DIR"/sample*_test_data_trimmed.fq.gz; do
 done
 
 log "BWA alignment and FASTQ extraction complete for all samples."
+log "--------------------------------"
 ```
 
 </details>

@@ -322,12 +322,18 @@ log "--------------------------------"
 </details>
 
 # Pavian Shiny App
-Using pavian shiny app, download the 
-
-
-
+Download the report.txt file from the kraken2_outputs directory; this is what will be uploaded into the Pavion. 
 
 https://fbreitwieser.shinyapps.io/pavian/
+
+# Using batch jobs
+
+In order to start a job using one of the three steps under the Genomic_analysis directroy, type sbatch "script name here" and it will run that step. 
+
+
+
+
+
 
 
 

@@ -322,7 +322,10 @@ log "--------------------------------"
 </details>
 
 # Pavian Shiny App
-This website will be used ot create a graphical representation of read counts. 
+Using pavian shiny app, download the 
+
+
+
 
 https://fbreitwieser.shinyapps.io/pavian/
 

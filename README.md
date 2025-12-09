@@ -2,7 +2,7 @@
 This pipeline will go through the steps, taking raw Illumina sequencing output reads, and outputting read counts of individual species. It trims off adapters and conducts quality control using Trim Galore, removes the human genome using BWA, and uses a reference database to analyse reads. For this I am inside my home directory under a folder labeled Genomic_analysis, which has subdirectories for each output type, logs, and the scripts used with each step. There are three major steps. 
 
 # Environment Setup
-On the Virginia Tech ARC website, open a terminal where you can create an environment. Use your home directory to enter the terminal. 
+On the Virginia Tech ARC website, navigate to your home directory. This is where it is easiest to open a terminal from and be in the correct place. 
 
 `interact -A introtogds -p normal_q -t 1:00:00`
 

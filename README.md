@@ -1,8 +1,8 @@
 # Gustafson_genomic_analysis_pipeline
-The goal of this project is to take short read Illumina sequencing data, trim off the adaptors and low quality bases, remove the human genome, and compare each read to the Kraken database. The end outputs will then be taken to count how many reads are from the same species.
+This pipeline will go through the steps, taking raw Illumina seqeuncing output reads, and outputting read counts of individual species. It trims off adapters and conducts quality control using Trim Galore, removes the human genome using BWA, and uses a reference database to analyse reads. For this I am inside my home directory under a folder labeled Genomic_analysis which has subdirectories for each output type, logs, and the scripts used with each step. There are three major steps. 
 
 # Environment Setup
-On the virginia tech arc website, open a terminal where you can create an environment. Use your home directory to enter the terminal. 
+On the virginia tech ARC website, open a terminal where you can create an environment. Use your home directory to enter the terminal. 
 
 `interact -A introtogds -p normal_q -t 1:00:00`
 

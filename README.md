@@ -1,8 +1,8 @@
 # Gustafson_genomic_analysis_pipeline
-This pipeline will go through the steps, taking raw Illumina seqeuncing output reads, and outputting read counts of individual species. It trims off adapters and conducts quality control using Trim Galore, removes the human genome using BWA, and uses a reference database to analyse reads. For this I am inside my home directory under a folder labeled Genomic_analysis which has subdirectories for each output type, logs, and the scripts used with each step. There are three major steps. 
+This pipeline will go through the steps, taking raw Illumina sequencing output reads, and outputting read counts of individual species. It trims off adapters and conducts quality control using Trim Galore, removes the human genome using BWA, and uses a reference database to analyse reads. For this I am inside my home directory under a folder labeled Genomic_analysis, which has subdirectories for each output type, logs, and the scripts used with each step. There are three major steps. 
 
 # Environment Setup
-On the virginia tech ARC website, open a terminal where you can create an environment. Use your home directory to enter the terminal. 
+On the Virginia Tech ARC website, open a terminal where you can create an environment. Use your home directory to enter the terminal. 
 
 `interact -A introtogds -p normal_q -t 1:00:00`
 
@@ -328,7 +328,7 @@ https://fbreitwieser.shinyapps.io/pavian/
 
 # Using batch jobs
 
-In order to start a job using one of the three steps under the Genomic_analysis directroy, type sbatch "script name here" and it will run that step. 
+In order to start a job using one of the three steps under the Genomic_analysis directory, type sbatch "script name here" and it will run that step. The three scripts used are all identical to the code nested under each analysis section in this pipeline.
 
 
 

@@ -234,7 +234,7 @@ Kraken2 is a very fast way to assign taxonomic labels using k-mers to metagenomi
 #SBATCH -p normal_q
 #SBATCH -A introtogds
 #SBATCH --mail-type=ALL
-#SBATCH --mail-user=nicgistafson1@vt.edu 
+#SBATCH --mail-user=nicgustafson1@vt.edu 
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=100GB
 #SBATCH --output=kraken2_%j.out

@@ -106,7 +106,7 @@ if you get an error about UNIX line endingsm use this: sed -i 's/\r$//' step2_bw
 #SBATCH -p normal_q
 #SBATCH -A introtogds
 #SBATCH --mail-type=ALL
-#SBATCH --mail-user=nicgistafson1@vt.edu
+#SBATCH --mail-user=nicgustafson1@vt.edu
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64GB
 #SBATCH --output=bwa_%j.out

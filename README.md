@@ -96,6 +96,8 @@ Burrow-Wheeler Aligner for short-read alignment. This maps DNA sequences against
 
 if you get an error about UNIX line endingsm use this: sed -i 's/\r$//' step2_bwa.sh then run the code again with sbatch 
 
+`sbatch step2_bwa.sh`
+
 <details>
   <summary>Click to expand code</summary>
 
@@ -223,6 +225,8 @@ log "--------------------------------"
 # Kraken2
 
 Kraken2 is a very fast way to assign taxonomic labels using k-mers to metagenomic DNA sequences. Kraken2 splits sequences into smaller fragments of DNA as "k-mers". The k-mers are then compared in a hashing table to determine similarity to reference genomes in the database. It is used for genomic reads, not protein like Diamond does. In this pipeline, the goal is not to align reads with spades because we want a direct read couunt, so I am skipping over SPAdes. 
+
+`sbatch step3_kraken.sh`
 
 <details>
   <summary>Click to expand code</summary>

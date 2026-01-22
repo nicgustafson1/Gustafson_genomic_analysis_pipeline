@@ -19,6 +19,11 @@ To create the Conda environment:
 conda env create -f environment.yml -n gustafson_analysis
 ```
 
+If already created: 
+'''
+conda activate gustafson_analysis
+'''
+
 # Analysis Pipeline
 
 

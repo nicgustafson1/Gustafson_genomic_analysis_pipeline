@@ -330,6 +330,169 @@ log "--------------------------------"
 
 </details>
 
+# Map Tenebrio Molitor
+
+`sbatch step5_tenmol_mapping.sh`
+
+<details>
+  <summary>Click to expand code</summary>
+
+```
+#!/bin/bash
+#SBATCH -t 70:00:00
+#SBATCH -p normal_q
+#SBATCH -A introtogds
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=nicgustafson1@vt.edu
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64GB
+#SBATCH --output=tenmol_%j.out
+#SBATCH --error=tenmol_%j.err
+
+set -euo pipefail
+
+# ---------------------------------
+# Move to project directory
+# ---------------------------------
+cd /home/nicgustafson1/genomic_analysis || exit 1
+
+# ---------------------------------
+# Load Conda environment safely
+# ---------------------------------
+module load Miniconda3
+source /apps/common/software/Miniconda3/24.7.1-0/etc/profile.d/conda.sh
+conda activate gustafson_analysis
+
+# Confirm tools are available
+which bwa || exit 1
+which samtools || exit 1
+which gzip || exit 1
+which zcat || exit 1
+
+# ---------------------------------
+# Parameters
+# ---------------------------------
+TENMOL_REF="/home/nicgustafson1/genomic_analysis/databases/tenmol/tenmol_genome.fna"
+INPUT_DIR="/home/nicgustafson1/genomic_analysis/bwa_outputs"
+OUTPUT_DIR="/home/nicgustafson1/genomic_analysis/tenmol_mapping_outputs"
+LOG_DIR="$OUTPUT_DIR/logs"
+THREADS=${SLURM_CPUS_PER_TASK:-16}
+
+mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
+
+# ---------------------------------
+# Logging function
+# ---------------------------------
+LOGFILE="$LOG_DIR/tenmol_map_${SLURM_JOB_ID}.log"
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOGFILE"; }
+
+log "--------------------------------"
+log "Starting Tenebrio mapping on $(hostname)"
+log "Input directory: $INPUT_DIR"
+log "Output directory: $OUTPUT_DIR"
+log "Tenebrio reference: $TENMOL_REF"
+log "Threads: $THREADS"
+log "--------------------------------"
+
+# Ensure reference + BWA index exists (basic check: .bwt)
+if [ ! -f "${TENMOL_REF}.bwt" ]; then
+  log "ERROR: BWA index not found next to $TENMOL_REF (missing ${TENMOL_REF}.bwt). Index it first with: bwa index $TENMOL_REF"
+  exit 1
+fi
+
+# Summary TSV (one row per sample)
+SUMMARY_TSV="$OUTPUT_DIR/tenmol_mapping_summary.tsv"
+echo -e "sample\tinput_bam_gz\ttotal_reads\tmapped_reads\tmapped_percent\ttop_contig\ttop_contig_mapped\tpct_mapped_on_top_contig" > "$SUMMARY_TSV"
+
+# ---------------------------------
+# Loop through BWA output BAMs
+# ---------------------------------
+for BAMGZ in "$INPUT_DIR"/aln-sample*_test_data.sorted.bam.gz; do
+  [ -e "$BAMGZ" ] || { log "No files matching $INPUT_DIR/aln-sample*_test_data.sorted.bam.gz"; exit 1; }
+
+  BASE=$(basename "$BAMGZ")
+  SAMPLE=${BASE%.sorted.bam.gz}
+  SAMPLE=${SAMPLE#aln-}
+
+  log "Processing sample: $SAMPLE"
+  log "Input BAM.GZ: $BAMGZ"
+
+  # Work files
+  BAM="$OUTPUT_DIR/${SAMPLE}.sorted.bam"
+  FASTQ="$OUTPUT_DIR/${SAMPLE}.all.fastq.gz"
+  TENBAM="$OUTPUT_DIR/${SAMPLE}.vs_tenmol.sorted.bam"
+  FLAGSTAT="$OUTPUT_DIR/${SAMPLE}.vs_tenmol.flagstat.txt"
+  IDXSTATS="$OUTPUT_DIR/${SAMPLE}.vs_tenmol.idxstats.txt"
+
+  # Decompress BAM.GZ -> BAM (samtools works reliably on plain .bam)
+  log "Decompressing BAM.GZ -> BAM"
+  gunzip -c "$BAMGZ" > "$BAM"
+
+  # Sanity check: does BAM contain reads?
+  TOTAL_IN_BAM=$(samtools view -c "$BAM" 2>/dev/null || echo 0)
+  if [ "$TOTAL_IN_BAM" -eq 0 ]; then
+    log "WARNING: $SAMPLE BAM contains 0 reads; skipping mapping."
+    echo -e "${SAMPLE}\t${BAMGZ}\t0\t0\t0\tNA\t0\t0" >> "$SUMMARY_TSV"
+    rm -f "$BAM"
+    continue
+  fi
+
+  # BAM -> single-end FASTQ (your BAMs are flagged as unpaired; this avoids empty R1/R2 files)
+  log "Converting BAM -> FASTQ (single-end)"
+  samtools fastq -@ "$THREADS" "$BAM" | gzip > "$FASTQ"
+
+  # Quick sanity check: FASTQ read count
+  FASTQ_READS=$(( $(zcat "$FASTQ" | wc -l) / 4 ))
+  if [ "$FASTQ_READS" -eq 0 ]; then
+    log "WARNING: $SAMPLE FASTQ is empty after conversion; skipping mapping."
+    echo -e "${SAMPLE}\t${BAMGZ}\t${TOTAL_IN_BAM}\t0\t0\tNA\t0\t0" >> "$SUMMARY_TSV"
+    rm -f "$BAM" "$FASTQ"
+    continue
+  fi
+
+  # Map to Tenebrio genome and sort
+  log "Mapping reads to Tenebrio reference"
+  bwa mem -t "$THREADS" "$TENMOL_REF" "$FASTQ" | samtools sort -@ "$THREADS" -o "$TENBAM"
+  samtools index "$TENBAM"
+
+  # Collect stats
+  log "Computing flagstat + idxstats"
+  samtools flagstat "$TENBAM" > "$FLAGSTAT"
+  samtools idxstats "$TENBAM" > "$IDXSTATS"
+
+  # Parse totals + mapped from flagstat (single-end format)
+  TOTAL_READS=$(awk 'NR==1{print $1}' "$FLAGSTAT")
+  MAPPED_READS=$(awk 'NR==7{print $1}' "$FLAGSTAT")
+  MAPPED_PCT=$(awk 'NR==7{gsub(/[()%]/,"",$5); print $5}' "$FLAGSTAT")
+
+  # Top contig from idxstats (by mapped reads, col3)
+  TOP_LINE=$(sort -k3,3nr "$IDXSTATS" | head -n 1)
+  TOP_CONTIG=$(echo "$TOP_LINE" | awk '{print $1}')
+  TOP_MAPPED=$(echo "$TOP_LINE" | awk '{print $3}')
+
+  # Percent of mapped reads that land on top contig
+  TOP_PCT="0"
+  if [ "$MAPPED_READS" -gt 0 ]; then
+    TOP_PCT=$(awk -v top="$TOP_MAPPED" -v mapped="$MAPPED_READS" 'BEGIN{printf "%.4f", (top/mapped)*100}')
+  fi
+
+  # Write summary row
+  echo -e "${SAMPLE}\t${BAMGZ}\t${TOTAL_READS}\t${MAPPED_READS}\t${MAPPED_PCT}\t${TOP_CONTIG}\t${TOP_MAPPED}\t${TOP_PCT}" >> "$SUMMARY_TSV"
+
+  log "Finished $SAMPLE: total=${TOTAL_READS}, mapped=${MAPPED_READS} (${MAPPED_PCT}%), top_contig=${TOP_CONTIG} top_mapped=${TOP_MAPPED} top_contig_pct_of_mapped=${TOP_PCT}%"
+  log "--------------------------------"
+
+  # Optional cleanup of big intermediates (uncomment if you want to save space)
+  # rm -f "$BAM" "$FASTQ"
+done
+
+log "All samples complete."
+log "Summary written to: $SUMMARY_TSV"
+log "--------------------------------"
+```
+
+</details>
+
 # Pavian Shiny App
 Download the report.txt file from the kraken2_outputs directory; this is what will be uploaded into the Pavion. 
 

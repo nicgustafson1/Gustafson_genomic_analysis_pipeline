@@ -339,6 +339,267 @@ log "--------------------------------"
 
 ```
 #!/bin/bash
+#SBATCH -t 24:00:00
+#SBATCH -p normal_q
+#SBATCH -A introtogds
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=nicgustafson1@vt.edu
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64GB
+#SBATCH --output=midori2_blast_%j.out
+#SBATCH --error=midori2_blast_%j.err
+
+set -euo pipefail
+
+# ---------------------------------
+# Move to project directory
+# ---------------------------------
+cd /home/nicgustafson1/genomic_analysis || exit 1
+
+# ---------------------------------
+# Load tools
+# ---------------------------------
+module load Miniconda3
+source /apps/common/software/Miniconda3/24.7.1-0/etc/profile.d/conda.sh
+conda activate gustafson_analysis
+
+# Confirm tools are available
+which samtools || exit 1
+
+# ---------------------------------
+# BLAST (ARC-installed)
+# ---------------------------------
+export PATH=/common/data/ncbi/BLAST/ncbi-blast-2.17.0+/bin:$PATH
+which blastn || exit 1
+which makeblastdb || exit 1
+blastn -version >/dev/null
+
+# ---------------------------------
+# Scratch (user-writable)
+# ---------------------------------
+SCRATCH_ROOT="/scratch/${USER}"
+mkdir -p "${SCRATCH_ROOT}"
+
+# ---------------------------------
+# Parameters
+# ---------------------------------
+BWA_OUT_DIR="/home/nicgustafson1/genomic_analysis/bwa_outputs"
+
+# LONGEST FASTA (read-only in common)
+LONGEST_FASTA="/common/data/ncbi/midori2_coi/MIDORI2_LONGEST_NUC_GB269_CO1_BLAST.fasta"
+
+# Build/use LONGEST BLAST DB in scratch (no -parse_seqids; MIDORI headers have long local IDs)
+LONGEST_DB_PREFIX="${SCRATCH_ROOT}/midori2_longest/MIDORI2_LONGEST_NUC_GB269_CO1_BLAST"
+
+# Output
+OUT_DIR="/home/nicgustafson1/genomic_analysis/midori2_blast_outputs"
+mkdir -p "${OUT_DIR}"
+
+# Scratch working space
+SCRATCH_BASE="${SCRATCH_ROOT}/midori2_longest_work_all"
+mkdir -p "${SCRATCH_BASE}"
+
+THREADS="${SLURM_CPUS_PER_TASK}"
+
+# ---------------------------------
+# Build BLAST DB for LONGEST (in scratch) if needed
+# IMPORTANT: no -parse_seqids
+# ---------------------------------
+mkdir -p "$(dirname "${LONGEST_DB_PREFIX}")"
+
+if [[ -f "${LONGEST_DB_PREFIX}.nsq" && -f "${LONGEST_DB_PREFIX}.nin" && -f "${LONGEST_DB_PREFIX}.nhr" ]]; then
+  echo "[INFO] Found existing LONGEST BLAST DB in scratch: ${LONGEST_DB_PREFIX}"
+else
+  echo "[INFO] LONGEST BLAST DB not found in scratch. Building it now (no -parse_seqids)..."
+  makeblastdb \
+    -in "${LONGEST_FASTA}" \
+    -dbtype nucl \
+    -out "${LONGEST_DB_PREFIX}" \
+    -hash_index
+fi
+
+# ---------------------------------
+# Helper: summarize BLAST to read counts by species
+# We BLAST with salltitles, then parse the last taxonomy field:
+# ... ;Genus_XXXXX;Genus_species_TAXID
+# Output: count  species_name  taxid
+# ---------------------------------
+summarize_counts () {
+  local blast_tsv="$1"
+  local out_counts="$2"
+
+  awk -F'\t' '
+    function clean_species(last,   n, parts, taxid, species, i) {
+      n = split(last, parts, "_")
+      if (n < 3) return last "\tNA"
+      taxid = parts[n]
+      species = parts[1]
+      for (i=2; i<=n-1; i++) species = species "_" parts[i]
+      return species "\t" taxid
+    }
+    {
+      q=$1; title=$2; bits=$13
+
+      split(title, hash, "###")
+      taxstr = (length(hash) > 1 ? hash[2] : title)
+
+      n = split(taxstr, fields, ";")
+      last = fields[n]
+
+      key = clean_species(last)
+
+      if (!(q in best) || bits > best[q]) {
+        best[q]=bits
+        best_key[q]=key
+      }
+    }
+    END{
+      for (q in best_key) cnt[best_key[q]]++
+      for (k in cnt) print cnt[k] "\t" k
+    }
+  ' "${blast_tsv}" | sort -nr > "${out_counts}"
+}
+
+# ---------------------------------
+# Find inputs: prefer *.sorted.bam.gz if present; otherwise use *.bam and *.sam.gz
+# ---------------------------------
+shopt -s nullglob
+
+BAM_GZS=( "${BWA_OUT_DIR}"/*.sorted.bam.gz "${BWA_OUT_DIR}"/*/*.sorted.bam.gz )
+BAMS=( "${BWA_OUT_DIR}"/*.bam "${BWA_OUT_DIR}"/*/*.bam )
+SAM_GZS=( "${BWA_OUT_DIR}"/*.sam.gz "${BWA_OUT_DIR}"/*/*.sam.gz )
+
+if [[ ${#BAM_GZS[@]} -eq 0 && ${#BAMS[@]} -eq 0 && ${#SAM_GZS[@]} -eq 0 ]]; then
+  echo "[ERROR] No input files found in ${BWA_OUT_DIR} (or its immediate subfolders)."
+  echo "Looked for: *.sorted.bam.gz, *.bam, *.sam.gz"
+  exit 1
+fi
+
+echo "[INFO] Found inputs:"
+echo "  sorted.bam.gz: ${#BAM_GZS[@]}"
+echo "  bam:           ${#BAMS[@]}"
+echo "  sam.gz:         ${#SAM_GZS[@]}"
+
+# Build a unique list of "samples" based on file basenames (strip extensions)
+# Priority: sorted.bam.gz > bam > sam.gz (skip lower-priority if a higher exists)
+declare -A seen
+INPUTS=()
+
+for f in "${BAM_GZS[@]}"; do
+  base=$(basename "$f")
+  sample="${base%.sorted.bam.gz}"
+  if [[ -z "${seen[$sample]+x}" ]]; then
+    seen["$sample"]=1
+    INPUTS+=( "$sample|BAMGZ|$f" )
+  fi
+done
+
+for f in "${BAMS[@]}"; do
+  base=$(basename "$f")
+  sample="${base%.bam}"
+  if [[ -z "${seen[$sample]+x}" ]]; then
+    seen["$sample"]=1
+    INPUTS+=( "$sample|BAM|$f" )
+  fi
+done
+
+for f in "${SAM_GZS[@]}"; do
+  base=$(basename "$f")
+  sample="${base%.sam.gz}"
+  if [[ -z "${seen[$sample]+x}" ]]; then
+    seen["$sample"]=1
+    INPUTS+=( "$sample|SAMGZ|$f" )
+  fi
+done
+
+echo "[INFO] Will process ${#INPUTS[@]} samples."
+
+# ---------------------------------
+# Main loop
+# ---------------------------------
+for entry in "${INPUTS[@]}"; do
+  IFS='|' read -r sample ftype path <<< "${entry}"
+
+  echo "---------------------------------"
+  echo "[INFO] Processing sample: ${sample}"
+  echo "[INFO] Input type: ${ftype}"
+  echo "[INFO] Input path: ${path}"
+
+  SAMPLE_DIR="${OUT_DIR}/${sample}"
+  mkdir -p "${SAMPLE_DIR}"
+
+  # Convert input -> FASTA in scratch
+  FASTA_OUT="${SCRATCH_BASE}/${sample}.fasta"
+
+  if [[ "${ftype}" == "BAMGZ" ]]; then
+    echo "[INFO] Converting BAM.GZ -> name-sorted -> FASTA..."
+    # head not used here; process all reads. Keep pipefail on.
+    gunzip -c "${path}" \
+      | samtools sort -@ "${THREADS}" -n -O BAM - \
+      | samtools fasta -@ "${THREADS}" - \
+      > "${FASTA_OUT}"
+
+  elif [[ "${ftype}" == "BAM" ]]; then
+    echo "[INFO] Converting BAM -> name-sorted -> FASTA..."
+    samtools sort -@ "${THREADS}" -n -O BAM "${path}" \
+      | samtools fasta -@ "${THREADS}" - \
+      > "${FASTA_OUT}"
+
+  elif [[ "${ftype}" == "SAMGZ" ]]; then
+    echo "[INFO] Converting SAM.GZ -> name-sorted -> FASTA..."
+    samtools view -@ "${THREADS}" -bh "${path}" \
+      | samtools sort -@ "${THREADS}" -n -O BAM - \
+      | samtools fasta -@ "${THREADS}" - \
+      > "${FASTA_OUT}"
+  else
+    echo "[ERROR] Unknown input type: ${ftype}"
+    exit 1
+  fi
+
+  # Sanity check FASTA
+  if [[ ! -s "${FASTA_OUT}" ]]; then
+    echo "[ERROR] FASTA output is empty for sample ${sample}: ${FASTA_OUT}"
+    exit 1
+  fi
+
+  # Run blastn
+  BLAST_TSV="${SAMPLE_DIR}/${sample}.midori2_longest.blast.tsv"
+  echo "[INFO] Running BLAST for ${sample}..."
+  blastn \
+    -query "${FASTA_OUT}" \
+    -db "${LONGEST_DB_PREFIX}" \
+    -num_threads "${THREADS}" \
+    -task megablast \
+    -max_target_seqs 5 \
+    -evalue 1e-20 \
+    -outfmt "6 qseqid salltitles pident length mismatch gapopen qstart qend sstart send evalue bitscore" \
+    -out "${BLAST_TSV}"
+
+  # Summarize to read counts
+  COUNTS_TXT="${SAMPLE_DIR}/${sample}.species_read_counts.txt"
+  summarize_counts "${BLAST_TSV}" "${COUNTS_TXT}"
+
+  echo "[INFO] Top 10 species for ${sample}:"
+  head -n 10 "${COUNTS_TXT}" || true
+
+  # Cleanup scratch FASTA to save space
+  rm -f "${FASTA_OUT}"
+done
+
+echo "[DONE] Outputs written to: ${OUT_DIR}"
+```
+
+</details>
+
+# BLAST
+
+`sbatch step5_tenmol_mapping.sh`
+
+<details>
+  <summary>Click to expand code</summary>
+
+```
+#!/bin/bash
 #SBATCH -t 70:00:00
 #SBATCH -p normal_q
 #SBATCH -A introtogds

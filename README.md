@@ -515,4 +515,155 @@ To get to your scratch folder /scratch/"username" for me it is nicgustafson1
 To access the current NCBI database do 
 cd /common/data/ncbi/fcs-gx/2025-11-11/gxdb
 
+# 10k Reads of Sample 2 testing (this worked) 
 
+`sbatch step5_tenmol_mapping.sh`
+
+<details>
+  <summary>Click to expand code</summary>
+
+```
+#!/bin/bash
+#SBATCH -t 02:00:00
+#SBATCH -p normal_q
+#SBATCH -A introtogds
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=nicgustafson1@vt.edu
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64GB
+#SBATCH --output=midori2_blast_test_sample2_10k_%j.out
+#SBATCH --error=midori2_blast_test_sample2_10k_%j.err
+
+set -euo pipefail
+
+cd /home/nicgustafson1/genomic_analysis || exit 1
+
+module load Miniconda3
+source /apps/common/software/Miniconda3/24.7.1-0/etc/profile.d/conda.sh
+conda activate gustafson_analysis
+
+which samtools || exit 1
+
+# BLAST
+export PATH=/common/data/ncbi/BLAST/ncbi-blast-2.17.0+/bin:$PATH
+which blastn || exit 1
+which makeblastdb || exit 1
+
+# Scratch
+SCRATCH_ROOT="/scratch/${USER}"
+mkdir -p "${SCRATCH_ROOT}"
+
+# Inputs
+BAM_GZ="/home/nicgustafson1/genomic_analysis/bwa_outputs/aln-sample2_test_data.sorted.bam.gz"
+LONGEST_FASTA="/common/data/ncbi/midori2_coi/MIDORI2_LONGEST_NUC_GB269_CO1_BLAST.fasta"
+
+# DB in scratch (no -parse_seqids)
+LONGEST_DB_PREFIX="${SCRATCH_ROOT}/midori2_longest/MIDORI2_LONGEST_NUC_GB269_CO1_BLAST"
+
+# Outputs
+OUT_DIR="/home/nicgustafson1/genomic_analysis/midori2_blast_outputs_TEST_SAMPLE2_10K"
+mkdir -p "${OUT_DIR}"
+
+SCRATCH_BASE="${SCRATCH_ROOT}/midori2_longest_work_test_sample2_10k"
+mkdir -p "${SCRATCH_BASE}"
+
+THREADS="${SLURM_CPUS_PER_TASK}"
+
+# Build BLAST DB (no -parse_seqids)
+mkdir -p "$(dirname "${LONGEST_DB_PREFIX}")"
+if [[ -f "${LONGEST_DB_PREFIX}.nsq" && -f "${LONGEST_DB_PREFIX}.nin" && -f "${LONGEST_DB_PREFIX}.nhr" ]]; then
+  echo "[INFO] Found existing LONGEST BLAST DB: ${LONGEST_DB_PREFIX}"
+else
+  echo "[INFO] Building LONGEST BLAST DB (no -parse_seqids)..."
+  makeblastdb -in "${LONGEST_FASTA}" -dbtype nucl -out "${LONGEST_DB_PREFIX}" -hash_index
+fi
+
+# Summarize by best hit per read; parse species + taxid from MIDORI title
+summarize_counts () {
+  local blast_tsv="$1"
+  local out_counts="$2"
+
+  awk -F'\t' '
+    function clean_species(last,   n, parts, taxid, species, i) {
+      n = split(last, parts, "_")
+      if (n < 3) return last "\tNA"
+      taxid = parts[n]
+      species = parts[1]
+      for (i=2; i<=n-1; i++) species = species "_" parts[i]
+      return species "\t" taxid
+    }
+    {
+      q=$1; title=$2; bits=$13
+
+      split(title, hash, "###")
+      taxstr = (length(hash) > 1 ? hash[2] : title)
+
+      n = split(taxstr, fields, ";")
+      last = fields[n]
+
+      key = clean_species(last)
+
+      if (!(q in best) || bits > best[q]) {
+        best[q]=bits
+        best_key[q]=key
+      }
+    }
+    END{
+      for (q in best_key) cnt[best_key[q]]++
+      for (k in cnt) print cnt[k] "\t" k
+    }
+  ' "${blast_tsv}" | sort -nr > "${out_counts}"
+}
+
+# Run sample2 (first 10k reads)
+if [[ ! -f "${BAM_GZ}" ]]; then
+  echo "[ERROR] Input not found: ${BAM_GZ}"
+  exit 1
+fi
+
+sample="aln-sample2_test_data_10k"
+SAMPLE_DIR="${OUT_DIR}/${sample}"
+mkdir -p "${SAMPLE_DIR}"
+
+FASTA_OUT="${SCRATCH_BASE}/${sample}.fasta"
+
+echo "[INFO] Converting coordinate-sorted BAM.GZ -> name-sorted -> FASTA; taking first 10,000 reads..."
+# NOTE: head causes SIGPIPE upstream when it finishes; with pipefail this would fail the job.
+# We temporarily disable pipefail for just this pipeline.
+set +o pipefail
+gunzip -c "${BAM_GZ}" \
+  | samtools sort -@ "${THREADS}" -n -O BAM - \
+  | samtools fasta -@ "${THREADS}" - \
+  | head -n 20000 > "${FASTA_OUT}"
+set -o pipefail
+
+# Sanity check: ensure we got 10,000 reads (20,000 FASTA lines)
+LINES=$(wc -l < "${FASTA_OUT}" || echo 0)
+if [[ "${LINES}" -lt 20000 ]]; then
+  echo "[ERROR] FASTA too short (${LINES} lines). Input may have <10,000 reads or conversion failed."
+  exit 1
+fi
+
+echo "[INFO] Running BLAST..."
+BLAST_TSV="${SAMPLE_DIR}/${sample}.midori2_longest.blast.tsv"
+blastn \
+  -query "${FASTA_OUT}" \
+  -db "${LONGEST_DB_PREFIX}" \
+  -num_threads "${THREADS}" \
+  -task megablast \
+  -max_target_seqs 5 \
+  -evalue 1e-20 \
+  -outfmt "6 qseqid salltitles pident length mismatch gapopen qstart qend sstart send evalue bitscore" \
+  -out "${BLAST_TSV}"
+
+COUNTS_TSV="${SAMPLE_DIR}/${sample}.species_read_counts.tsv"
+summarize_counts "${BLAST_TSV}" "${COUNTS_TSV}"
+
+echo "[INFO] Top 20 species:"
+head -n 20 "${COUNTS_TSV}" || true
+
+rm -f "${FASTA_OUT}"
+echo "[DONE] Outputs in: ${SAMPLE_DIR}"
+```
+
+</details>

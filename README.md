@@ -593,7 +593,7 @@ echo "[DONE] Outputs written to: ${OUT_DIR}"
 
 # BLAST
 
-`sbatch step5_tenmol_mapping.sh`
+`sbatch BLAST.sh`
 
 <details>
   <summary>Click to expand code</summary>
@@ -778,7 +778,7 @@ cd /common/data/ncbi/fcs-gx/2025-11-11/gxdb
 
 # 10k Reads of Sample 2 testing (this worked) 
 
-`sbatch step5_tenmol_mapping.sh`
+`sbatch BLAST_testing_sample2`
 
 <details>
   <summary>Click to expand code</summary>
